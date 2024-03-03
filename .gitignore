@@ -1,1 +1,3 @@
-passwords.json
+database.ini
+ETL
+__pycache__
