@@ -1,3 +1,5 @@
 database.ini
 ETL
+venv
 __pycache__
+.ipynb_checkpoints
