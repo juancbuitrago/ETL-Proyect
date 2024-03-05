@@ -1,4 +1,4 @@
-"""Conexion con postgres"""
+"""PostgreSQL Connection"""
 
 import csv
 import psycopg2
@@ -6,7 +6,7 @@ from config import config
 
 
 def connect():
-    """ Conexion a la base de datos """
+    """ Connection with the Database """
     connection = None
     try:
         params = config()

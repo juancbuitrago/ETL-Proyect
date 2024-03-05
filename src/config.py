@@ -1,4 +1,4 @@
-"""Configuracion de la conexion"""
+"""Connection Settings"""
 from configparser import ConfigParser
 
 
