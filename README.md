@@ -31,7 +31,7 @@ _Also, *[Detailed Documentation](https://github.com/juancbuitrago/ETL-Project/bl
 - [Requirements](#requirements)
 - [Setup](#setup)
 - [Data Analysis](#exploratory-data-analysis)
-- [Analysis & Visualizations](#analysis-visualizations)
+- [Analysis & Visualizations](#visualizations)
 
 ## Requirements <a name="requirements"></a> ##
 - Python 3.x
@@ -93,7 +93,7 @@ _Previous command will install the following necessary libraries for the ETL Pro
 - Exploratory Data Analysis
 - Graphics and analysis
 
-## Analysis & Visualization <a name="analysis-visualizations"></a> ###
+## Visualization <a name="visualizations"></a> ###
 
 ### These visualizations can be seen in the **[Dashboard Summary](https://github.com/juancbuitrago/ETL-Project/blob/main/docs/Games%20dashboard.pdf)**.
 
