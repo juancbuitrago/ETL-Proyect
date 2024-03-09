@@ -95,6 +95,6 @@ _Previous command will install the following necessary libraries for the ETL Pro
 
 ## Visualization <a name="visualizations"></a> ###
 
-### These visualizations can be seen in the **[Dashboard Summary](https://github.com/juancbuitrago/ETL-Project/blob/main/docs/Games%20dashboard.pdf)**.
+### These visualizations can be seen in the **[Dashboard](https://github.com/juancbuitrago/ETL-Project/blob/main/docs/Games%20dashboard.pdf)**.
 
 ### Also, threre is the **[Published Dashboard](https://app.powerbi.com/links/Ftzdqf7wMF?ctid=693cbea0-4ef9-4254-8977-76e05cb5f556&pbi_source=linkShare&bookmarkGuid=b0b55ff7-280c-4ed7-bc76-83bce60db00f)** for a better interactive experience with the dashboard and the data.
