@@ -11,11 +11,11 @@
         ├── data
         │   └── Dataset.csv
         ├── docs
-        │   ├── Games dashboard.pdf
-        │   └── ETL.pdf
+        │   ├── ETL.pdf
+        │   └── Games dashboard.pdf
         ├── notebooks
-        │   ├── EDA.ipynb
-        │   └── databse.ini
+        │   ├── database.ini
+        │   └── EDA.ipynb
         └── src
             ├── database.ini
             └── main.py
