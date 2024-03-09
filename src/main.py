@@ -1,8 +1,10 @@
 """PostgreSQL Connection"""
 
+import sys
 import csv
 import psycopg2
-from config import config
+sys.path.append('../config/')
+from configuration import config
 
 
 def connect():
@@ -33,7 +35,7 @@ def connect():
                         platforms_info VARCHAR(1500) ); """
                 crsr.execute(create_table)
 
-                with open('Dataset.csv', newline='', encoding='utf-8') as file:
+                with open('../data/Dataset.csv', newline='', encoding='utf-8') as file:
                     data = csv.reader(file, delimiter=';')
                     for row in data:
                         insert_data = crsr.mogrify(
