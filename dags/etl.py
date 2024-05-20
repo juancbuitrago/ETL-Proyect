@@ -1,5 +1,6 @@
 ''' ETL DAG '''
 
+
 import json
 import logging
 import os
@@ -7,25 +8,31 @@ from dotenv import load_dotenv
 from io import BytesIO
 import pandas as pd
 from sqlalchemy import create_engine
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
 
 load_dotenv()
 
 # Configuration paths and file names
-Config_Path = os.getenv('API_KEY')
-spotify_file = '/opt/airflow/data/spotify_dataset.csv'
-grammy_file = '/opt/airflow/data/the_grammy_awards.csv'
-output_file_path = '/opt/airflow/outputs/merged_data.csv'
+Config_Path = os.getenv('DB_PATH')
 
-def load_config():
+"""def load_config():
     with open(Config_Path, 'r') as file:
-        return json.load(file)
+        return json.load(file)"""
 
-def read_spotify_data():
-    logging.info("Extracting Spotify data...")
-    return pd.read_csv(spotify_file)
+
+def extract_metacritic_data():
+    """read the original dataset"""
+    config = Config_Path
+
+    db_url = f"postgresql+psycopg2://{config['user']}:{config['password']}@{config['host']}/{config['database']}"
+    engine = create_engine(db_url)
+
+    try:
+        conn = engine.connect()
+        print("Database connection successful.")
+    except Exception as e:
+        print("Database connection failed:", e)
+        sys.exit(1)
+
 
 def read_and_store_grammy_data():
     config = load_config()
