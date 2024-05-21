@@ -156,14 +156,14 @@ def transform_api_data(api_data):
     api_relevant_columns = [
         'name', 'released', 'rating', 'ratings_count', 'metacritic', 'genres', 'platforms'
     ]
-    api_data_relevant = api_data[api_relevant_columns].copy()
-    api_data_relevant['name'] = api_data_relevant['name'].str.strip().str.upper()
-    api_data_relevant['released'] = pd.to_datetime(api_data_relevant['released']).dt.date
-    api_data_relevant['name'] = api_data_relevant['name'].str.lower() \
+    api_data = api_data[api_relevant_columns].copy()
+    api_data['name'] = api_data['name'].str.strip().str.upper()
+    api_data['released'] = pd.to_datetime(api_data['released']).dt.date
+    api_data['name'] = api_data['name'].str.lower() \
                              .str.replace(r"\(.*\)", "", regex=True) \
                              .str.replace(r"[-:,$#.//'\[\]()]", "", regex=True)
 
-    api_data_relevant.rename(columns={
+    api_data.rename(columns={
         'name': 'title',
         'rating': 'rating',
         'metacritic': 'metacritic_score',
@@ -179,33 +179,117 @@ def transform_api_data(api_data):
         "Teen": "RATED T FOR TEEN"
     }
 
-    api_data_relevant['rating'] = api_data_relevant['rating'].map(rating_mapping)
+    api_data['rating'] = api_data['rating'].map(rating_mapping)
 
-    api_data_relevant = api_data_relevant.map(lambda x: x.upper() if isinstance(x, str) else x)
+    api_data = api_data.map(lambda x: x.upper() if isinstance(x, str) else x)
 
     return api_data
 
 
 def merge_data(metacritic_data, api_data):
     """Merge dataset and API data"""
+    logging.info("Columns in metacritic data before merge: %s", metacritic_data.columns.tolist())
+    logging.info("Columns in API data before merge: %s", api_data.columns.tolist())
+    
     metacritic_data['title'] = metacritic_data['title'].str.strip().str.upper()
     metacritic_data['released'] = pd.to_datetime(metacritic_data['released']).dt.date
 
-    merged_data = pd.merge(api_data, metacritic_data, on=['title', 'released', 'genres', 'platforms'], how='outer')
+    merged_data = pd.merge(api_data, metacritic_data, on=['title', 'released', 'genres', 'platforms', 'rating', 'ratings_count'], how='outer')
     merged_data.drop(columns=['metacritic_score', 'user score', 'developer', 'publisher'], inplace=True)
-    cleaned_merged_data = merged_data.dropna()
-    return cleaned_merged_data
+    merged_data = merged_data.dropna()
+    logging.info("Merged data columns: %s", merged_data.columns.tolist())
+    return merged_data
 
 
 def load_data(merged_data):
-    """Load data into PostgreSQL"""
-    config = Config_Path
+    """Load data into PostgreSQL and create the dimensional model"""
+    # Load configuration
+    config = load_config()
     db_url = f"postgresql+psycopg2://{config['user']}:{config['password']}@{config['host']}/{config['database']}"
     engine = create_engine(db_url)
+    conn = engine.connect()
 
-    try:
-        conn = engine.connect()
-        merged_data.to_sql('merged_data', conn, if_exists='replace', index=False)
-        logging.info("Data loaded into the PostgreSQL database successfully.")
-    except ImportError as e:
-        logging.debug("Failed to load data into the PostgreSQL database: %s", e)
+    # Create dimension tables
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS platform (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL
+    );
+    """)
+
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS classification (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL
+    );
+    """)
+
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS genre (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL
+    );
+    """)
+
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS released (
+        id SERIAL PRIMARY KEY,
+        day INT NOT NULL,
+        month INT NOT NULL,
+        year INT NOT NULL,
+        UNIQUE(day, month, year)
+    );
+    """)
+
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS fact_game (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        platform_id INT REFERENCES platform(id),
+        classification_id INT REFERENCES classification(id),
+        genre_id INT REFERENCES genre(id),
+        released_id INT REFERENCES released(id),
+        ratings_count INT NOT NULL
+    );
+    """)
+
+    def populate_dimension_table(table_name, column_name):
+        distinct_values = merged_data[column_name].dropna().unique()
+        for value in distinct_values:
+            conn.execute(f"INSERT INTO {table_name} (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (value,))
+
+    populate_dimension_table('platform', 'platforms')
+    populate_dimension_table('classification', 'rating')
+    populate_dimension_table('genre', 'genres')
+
+    # Ensure 'released' column is in datetime format
+    merged_data['released'] = pd.to_datetime(merged_data['released'], errors='coerce')
+
+    # Populate released dimension
+    released_data = merged_data[['released']].dropna().drop_duplicates()
+    released_data['day'] = released_data['released'].dt.day
+    released_data['month'] = released_data['released'].dt.month
+    released_data['year'] = released_data['released'].dt.year
+    for _, row in released_data.iterrows():
+        conn.execute(
+            "INSERT INTO released (day, month, year) VALUES (%s, %s, %s) ON CONFLICT (day, month, year) DO NOTHING",
+            (row['day'], row['month'], row['year'])
+        )
+
+    # Populate fact table
+    for _, row in merged_data.iterrows():
+        platform_id = conn.execute("SELECT id FROM platform WHERE name = %s", (row['platforms'],)).fetchone()[0]
+        classification_id = conn.execute("SELECT id FROM classification WHERE name = %s", (row['rating'],)).fetchone()[0]
+        genre_id = conn.execute("SELECT id FROM genre WHERE name = %s", (row['genres'],)).fetchone()[0]
+        release_id = conn.execute(
+            "SELECT id FROM released WHERE day = %s AND month = %s AND year = %s",
+            (row['released'].day, row['released'].month, row['released'].year)
+        ).fetchone()[0]
+
+        conn.execute(
+            "INSERT INTO fact_game (title, platform_id, classification_id, genre_id, released_id, ratings_count) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            (row['title'], platform_id, classification_id, genre_id, release_id, row['ratings_count'])
+        )
+
+    logging.info("Data loaded into the dimensional model successfully.")
