@@ -8,8 +8,10 @@ import tempfile
 import os
 import sys
 from io import StringIO
-sys.path.append('../dbconfig/')
+
+sys.path.append('../config/')
 import dbconfig
+
 
 load_dotenv()
 metacritic_games = os.getenv("ORIGIN_DS1")
@@ -17,7 +19,6 @@ rawg_games = os.getenv("ORIGIN_DS2")
 metacritic_data = os.getenv("DS1_PATH")
 rawg_data = os.getenv("DS2_PATH")
 merge_data = os.getenv("MERGE_PATH")
-
 
 
 def create_insert_metacritic_data():

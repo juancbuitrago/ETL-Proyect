@@ -30,6 +30,7 @@ pure-eval
 Pygments
 pyparsing
 python-dateutil
+python-dotenv
 pytz
 pywin32
 pyzmq

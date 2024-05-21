@@ -1,10 +1,10 @@
 ''' ETL DAG '''
 
-
 import json
 import logging
 import os
 from dotenv import load_dotenv
+import psycopg2
 from io import BytesIO
 import pandas as pd
 from sqlalchemy import create_engine
