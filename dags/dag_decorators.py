@@ -1,4 +1,5 @@
-# dag.py
+''' Decorators'''
+
 from datetime import timedelta, datetime
 from airflow.decorators import dag, task
 import etl
@@ -6,7 +7,7 @@ import etl
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': datetime(2024, 4, 16),
+    'start_date': datetime(2024, 5, 20),
     'email': ['airflow@example.com'],
     'email_on_failure': False,
     'email_on_retry': False,
@@ -14,46 +15,41 @@ default_args = {
     'retry_delay': timedelta(minutes=1)
 }
 
-@dag(default_args=default_args, description='ETL DAG for merging Spotify and Grammy data', schedule_interval='@daily', tags=['data merging'])
+@dag(default_args=default_args, description='ETL DAG for merging dataset and API data', schedule_interval='@daily', tags=['data merging'])
+
+
 def data_merging_etl_dag():
+    '''Game data workflow'''
     @task
-    def extract_spotify_data():
-        return etl.read_spotify_data()
+    def extract_metacritic_data():
+        return etl.extract_metacritic_data()
 
     @task
-    def load_and_fetch_grammy_data():
-        etl.read_and_store_grammy_data()
-        return etl.fetch_grammy_data()
+    def extract_api_data():
+        return etl.extract_api_data()
 
     @task
-    def transform_spotify_data(spotify_data):
-        return etl.apply_transformations_to_spotify(spotify_data)
+    def transform_metacritic_data(metacritic_data):
+        return etl.transform_metacritic_data(metacritic_data)
 
     @task
-    def transform_grammy_data(grammy_data):
-        return etl.clean_grammy_data(grammy_data)
+    def transform_api_data(api_data):
+        return etl.transform_api_data(api_data)
 
     @task
-    def merge_data(spotify_data, grammy_data):
-        return etl.merge_data_sets(spotify_data, grammy_data)
-    
-    @task
-    def upload_data_to_database(merged_data):
-        table_name = 'merged_data_table'
-        etl.upload_data_to_db(merged_data, table_name)
+    def merge_data(transformed_metacritic_data, transformed_api_data):
+        return etl.merge_data(transformed_metacritic_data, transformed_api_data)
 
     @task
-    def upload_to_drive(merged_data):
-        filename = 'merged_data.csv'
-        folder_id = '1ado1F0k-g0rE5ESvfMdqqhpvVXj048fj'
-        etl.upload_data_to_drive(merged_data, filename, folder_id)
+    def load_data(merged_data):
+        etl.load_data(merged_data)
 
-    spotify_data = extract_spotify_data()
-    grammy_data = load_and_fetch_grammy_data()
-    transformed_spotify = transform_spotify_data(spotify_data)
-    transformed_grammy = transform_grammy_data(grammy_data)
-    merged_data = merge_data(transformed_spotify, transformed_grammy)
-    upload_data_to_database(merged_data)
-    upload_to_drive(merged_data)
+    metacritic_data = extract_metacritic_data()
+    api_data = extract_api_data()
+    transformed_metacritic_data = transform_metacritic_data(metacritic_data)
+    transformed_api_data = transform_api_data(api_data)
+    merged_data = merge_data(transformed_metacritic_data, transformed_api_data)
+    load_data(merged_data)
 
-spotify_grammy_etl_workflow = data_merging_etl_dag()
+
+ETL_WORKFLOW = data_merging_etl_dag()

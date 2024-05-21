@@ -1,8 +1,8 @@
 ''' ETL DAG '''
 
-import json
 import logging
 import os
+import json
 from dotenv import load_dotenv
 import psycopg2
 from io import BytesIO
@@ -10,133 +10,170 @@ import pandas as pd
 from sqlalchemy import create_engine
 
 load_dotenv()
-
-# Configuration paths and file names
 Config_Path = os.getenv('DB_PATH')
-
-"""def load_config():
-    with open(Config_Path, 'r') as file:
-        return json.load(file)"""
 
 
 def extract_metacritic_data():
-    """read the original dataset"""
+    """Extract data from Metacritic"""
     config = Config_Path
+    db_url = f"postgresql+psycopg2://{config['user']}:{config['password']}@{config['host']}/{config['database']}"
+    engine = create_engine(db_url)
 
+    try:
+        query = "SELECT * FROM games_data"
+        metacritic_data = pd.read_sql(query, engine)
+        logging.info("CSV data extracted successfully")
+    except ImportError as e:
+        logging.debug("Database connection failed: %s", e)
+    return metacritic_data
+
+
+def extract_api_data():
+    """Extract data from the API"""
+    config = Config_Path
+    db_url = f"postgresql+psycopg2://{config['user']}:{config['password']}@{config['host']}/{config['database']}"
+    engine = create_engine(db_url)
+
+    try:
+        query = "SELECT * FROM api_data"
+        api_data = pd.read_sql(query, engine)
+        logging.info("CSV data extracted successfully")
+    except ImportError as e:
+        logging.debug("Database connection failed: %s", e)
+    return api_data
+
+
+def transform_metacritic_data(metacritic_data):
+    """Transform metacritic data"""
+    metacritic_data['release date'] = pd.to_datetime(metacritic_data['release date'], format='%m/%d/%Y', errors='coerce')
+    metacritic_data['user ratings count'] = pd.to_numeric(metacritic_data['user ratings count'], errors='coerce').fillna(0).astype(int)
+    metacritic_data['user score'] = pd.to_numeric(metacritic_data['user score'], errors='coerce').fillna(0).astype(float)
+
+    def extract_first_platform_name(json_str):
+        if json_str == 'Platforms Info' or json_str == '':
+            return None
+        try:
+            json_data = json.loads(json_str.replace("'", '"'))
+            if json_data:
+                first_platform_name = json_data[0]['Platform']
+                return first_platform_name
+        except json.JSONDecodeError as e:
+            logging.error("Failed to load %s", e)
+        return None
+
+    metacritic_data['platforms'] = metacritic_data['platforms info'].apply(extract_first_platform_name)
+    metacritic_data.drop(columns=['platforms info'], inplace=True)
+    metacritic_data.rename(columns={
+        'product rating': 'rating',
+        'release date': 'released',
+        'user ratings count': 'ratings_count'
+    }, inplace=True)
+    metacritic_data['title'] = metacritic_data['title'].str.lower() \
+                             .str.replace(r"\(.*\)", "", regex=True) \
+                             .str.replace(r"[-:,$#.//'\[\]()]", "", regex=True)
+    metacritic_data = metacritic_data.applymap(lambda x: x.upper() if isinstance(x, str) else x)
+    return metacritic_data
+
+
+def transform_api_data(api_data):
+    """Transform API data"""
+    def extract_classification_names(json_str):
+        if isinstance(json_str, str):
+            try:
+                classification_data = json.loads(json_str.replace("'", '"'))
+                if isinstance(classification_data, list):
+                    classification_names = [classification['name'] for classification in classification_data]
+                    return ', '.join(classification_names)
+                elif 'name' in classification_data:
+                    return classification_data['name']
+                else:
+                    return None
+            except json.JSONDecodeError:
+                return None
+        else:
+            return None
+
+    def extract_first_genre_name(json_str):
+        if isinstance(json_str, str):
+            try:
+                genre_data = json.loads(json_str.replace("'", '"'))
+                if isinstance(genre_data, dict):
+                    return genre_data['name']
+                elif isinstance(genre_data, list) and len(genre_data) > 0:
+                    return genre_data[0]['name']
+                else:
+                    return None
+            except json.JSONDecodeError:
+                return None
+        else:
+            return None
+
+    def extract_first_platform_name_from_string(json_str):
+        if not json_str or json_str.strip() in ['platforms', '']:
+            return None
+        if json_str.isalpha():
+            return json_str
+        try:
+            json_str = json_str.replace("'", '"')
+            matches = re.findall(r'"name":\s*"([^"]+)"', json_str)
+            if matches:
+                return matches[0]
+            else:
+                return None
+        except ImportError as e:
+            logging.error("Failed to load %s", e)
+            return None
+
+    api_data['rating'] = api_data['esrb_rating'].apply(extract_classification_names)
+    api_data['genres'] = api_data['genres'].apply(extract_first_genre_name)
+    api_data['platforms'] = api_data.apply(lambda row: extract_first_platform_name_from_string(row['platforms'], row.name), axis=1)
+
+    api_relevant_columns = [
+        'name', 'released', 'rating', 'ratings_count', 'metacritic', 'genres', 'platforms'
+    ]
+    api_data_relevant = api_data[api_relevant_columns].copy()
+    api_data_relevant['name'] = api_data_relevant['name'].str.strip().str.upper()
+    api_data_relevant['released'] = pd.to_datetime(api_data_relevant['released']).dt.date
+    api_data_relevant['name'] = api_data_relevant['name'].str.lower() \
+                             .str.replace(r"\(.*\)", "", regex=True) \
+                             .str.replace(r"[-:,$#.//'\[\]()]", "", regex=True)
+    api_data_relevant.rename(columns={
+        'name': 'title',
+        'rating': 'rating',
+        'metacritic': 'metacritic_score',
+        'ratings_count': 'ratings_count'
+    }, inplace=True)
+
+    rating_mapping = {
+        "Adults Only": "RATED AO FOR ADULTS ONLY",
+        "Everyone": "RATED E FOR EVERYONE",
+        "Everyone +10": "RATED E +10 FOR EVERYONE +10",
+        "Mature": "RATED M FOR MATURE",
+        "Rating Pending": "RATED RP FOR RATE PENDING",
+        "Teen": "RATED T FOR TEEN"
+    }
+    api_data_relevant['rating'] = api_data_relevant['rating'].map(rating_mapping)
+    api_data_relevant = api_data_relevant.map(lambda x: x.upper() if isinstance(x, str) else x)
+    return api_data
+
+
+def merge_data(metacritic_data, api_data):
+    """Merge dataset and API data"""
+    merged_data = pd.merge(api_data, metacritic_data, on=['title', 'released', 'genres', 'platforms'], how='outer')
+    merged_data.drop(columns=['metacritic_score', 'user score', 'developer', 'publisher'], inplace=True)
+    cleaned_merged_data = merged_data.dropna()
+    return cleaned_merged_data
+
+
+def load_data(merged_data):
+    """Load data into PostgreSQL"""
+    config = Config_Path
     db_url = f"postgresql+psycopg2://{config['user']}:{config['password']}@{config['host']}/{config['database']}"
     engine = create_engine(db_url)
 
     try:
         conn = engine.connect()
-        print("Database connection successful.")
-    except Exception as e:
-        print("Database connection failed:", e)
-        sys.exit(1)
-
-
-def read_and_store_grammy_data():
-    config = load_config()
-    db_url = f"postgresql+pg8000://{config['user']}:{config['password']}@{config['host']}:{config['port']}/{config['dbname']}"
-    engine = create_engine(db_url)
-    grammy_data = pd.read_csv(grammy_file)
-    grammy_data.to_sql('grammy_awards', engine, index=False, if_exists='replace')
-    logging.info("Grammy data loaded to DB.")
-
-def fetch_grammy_data():
-    config = load_config()
-    db_url = f"postgresql+pg8000://{config['user']}:{config['password']}@{config['host']}:{config['port']}/{config['dbname']}"
-    engine = create_engine(db_url)
-    return pd.read_sql_table('grammy_awards', engine)
-
-def apply_transformations_to_spotify(data):
-    # Define the genre categories with their respective sub-genres
-    genre_mapping = {
-        'Rock': ['alt-rock', 'grunge', 'hard-rock', 'punk-rock', 'rock', 'rock-n-roll', 'goth', 'punk', 'psych-rock', 'j-rock', 'acoustic', 'british', 'rockabilly'],
-        'Pop': ['pop', 'power-pop', 'pop-film', 'k-pop', 'j-pop', 'cantopop', 'children', 'disney', 'happy', 'kids', 'mandopop', 'mpb', 'power-pop', 'romance', 'sad', 'singer-songwriter', 'spanish'],
-        'Electronic/Dance': ['electronic', 'dubstep', 'edm', 'electro', 'techno', 'trance', 'house', 'deep-house', 'disco', 'dancehall', 'chicago-house', 'detroit-techno', 'hardstyle', 'minimal-techno', 'j-dance', 'party', 'breakbeat', 'drum-and-bass', 'dub', 'progressive-house', 'trip-hop'],
-        'Hip-Hop/R&B': ['hip-hop', 'r-n-b', 'j-idol', 'afrobeat'],
-        'Metal': ['black-metal', 'death-metal', 'heavy-metal', 'metal', 'metalcore', 'grindcore', 'industrial', 'hardcore'],
-        'Jazz/Blues': ['jazz', 'blues'],
-        'Folk/Country': ['folk', 'country', 'bluegrass', 'forro', 'honky-tonk'],
-        'Latin': ['latin', 'salsa', 'samba', 'reggaeton', 'latino'],
-        'Classical/Opera': ['classical', 'opera', 'piano'],
-        'Indie/Alternative': ['alternative', 'indie', 'indie-pop', 'singer-songwriter', 'emo', 'ska'],
-        'World Music': ['world-music', 'brazil', 'indian', 'iranian', 'malay', 'mandopop', 'swedish', 'turkish', 'french', 'german', 'reggae', 'synth-pop'],
-        'Ambient/Chill/Downtempo': ['ambient', 'chill', 'new-age', 'sleep', 'tango', 'study'],
-        'Funk/Soul': ['funk', 'soul', 'gospel', 'groove']
-    }
-
-    # Initialize all tracks as 'Other'
-    data['genre'] = 'Other'
-
-    # Assign genres based on the mapping
-    for genre, sub_genres in genre_mapping.items():
-        data.loc[data['track_genre'].isin(sub_genres), 'genre'] = genre
-
-    # Drop duplicates based on track ID
-    data.drop_duplicates(subset=['track_id'], inplace=True)
-
-    # Ensure that the 'artists' column does not contain NaN values
-    data['artists'] = data['artists'].fillna('Unknown Artist')
-
-    # Extract the lead artist from 'artists' (assuming multiple artists are separated by semicolons)
-    data['lead_artist'] = data['artists'].apply(lambda x: x.split(';')[0])
-
-    # Categorize 'popularity' into three levels
-    data['popularity_level'] = pd.cut(data['popularity'], bins=[0, 33, 66, 100], labels=['Low', 'Medium', 'High'])
-
-    # Define columns that are unnecessary and drop them
-    unwanted_columns = [
-        'Unnamed: 0',
-        'track_id',
-        'key',
-        'mode',
-        'instrumentalness',
-        'time_signature',
-        'liveness',
-        'valence'
-    ]
-    data.drop(columns=unwanted_columns, inplace=True)
-
-    # Further data cleanup and transformations can be added here
-    logging.info("Transformations applied to Spotify data")
-
-    return data
-
-def clean_grammy_data(data):
-    data['artist_clean'] = data['artist'].fillna(data['workers']).str.extract(r'([^\+]+)')[0]
-    data['category_clean'] = data['category'].str.replace(r'\[|\]', '', regex=True)
-    return data
-
-def merge_data_sets(spotify, grammy):
-    merged_data = pd.merge(spotify, grammy, left_on='track_name', right_on='nominee', how='left')
-    merged_data.drop(columns=['workers', 'artist', 'year', 'img', 'updated_at', 'published_at'], inplace=True)
-    merged_data.fillna({'title': 'not nominated', 'category': 'not nominated', 'nominee': 'not nominated', 'winner': False}, inplace=True)
-    return merged_data
-
-def upload_data_to_db(merged_data, table_name):
-    try:
-        # Load the database configuration
-        config = load_config()
-        db_url = f"postgresql+pg8000://{config['user']}:{config['password']}@{config['host']}:{config['port']}/{config['dbname']}"
-        engine = create_engine(db_url)
-        
-        # Upload the DataFrame to the specified table
-        merged_data.to_sql(name=table_name, con=engine, index=False, if_exists='replace')
-        logging.info(f"Data successfully uploaded to the database table {table_name}.")
-    except Exception as e:
-        logging.error(f"Failed to upload data to the database: {e}")
-        raise
-
-def upload_data_to_drive(data, filename, folder_id):
-    SCOPES = ['https://www.googleapis.com/auth/drive']
-    SERVICE_ACCOUNT_FILE = '/opt/airflow/config/service_account.json'
-    credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-    service = build('drive', 'v3', credentials=credentials)
-
-    csv_bytes = data.to_csv(index=False).encode('utf-8')
-    csv_io = BytesIO(csv_bytes)
-    file_metadata = {'name': filename, 'parents': [folder_id]}
-    media = MediaIoBaseUpload(csv_io, mimetype='text/csv', resumable=True)
-    file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-    logging.info(f"File {filename} uploaded with ID: {file.get('id')}")
+        merged_data.to_sql('merged_data', conn, if_exists='replace', index=False)
+        logging.info("Data loaded into the PostgreSQL database successfully.")
+    except ImportError as e:
+        logging.debug("Failed to load data into the PostgreSQL database: %s", e)

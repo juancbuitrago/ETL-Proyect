@@ -25,14 +25,12 @@ pillow
 platformdirs
 prompt-toolkit
 psutil
-psycopg2
 pure-eval
 Pygments
 pyparsing
 python-dateutil
 python-dotenv
 pytz
-pywin32
 pyzmq
 seaborn
 six
