@@ -1,35 +1,27 @@
 ''' ETL DAG '''
 
 import logging
-import os
 import json
-from dotenv import load_dotenv
+from configparser import ConfigParser
+import re
 import psycopg2
-from io import BytesIO
 import pandas as pd
 from sqlalchemy import create_engine
 
-load_dotenv()
-Config_Path = os.getenv('DB_PATH')
 
-if Config_Path is None:
-    logging.error("Environment variable 'DB_PATH' is not set.")
-else:
-    logging.info("Environment variable 'DB_PATH' is set to:%s", Config_Path)
-
-
-def load_config():
-    """load config"""
-    try:
-        with open(Config_Path, 'r', encoding="utf-8") as file:
-            config = json.load(file)
-            logging.info("Configuration file loaded successfully.")
-            return config
-    except FileNotFoundError:
-        logging.error("Configuration file not found at path %s", Config_Path)
-        return None
-    except json.JSONDecodeError as e:
-        logging.error("Error decoding JSON configuration file: %s", e)
+def load_config(filename="config/database.ini", section="postgresql"):
+    """Load configuration from .ini file"""
+    parser = ConfigParser()
+    parser.read(filename)
+    config = {}
+    if parser.has_section(section):
+        params = parser.items(section)
+        for param in params:
+            config[param[0]] = param[1]
+        logging.info("Configuration file loaded successfully.")
+        return config
+    else:
+        logging.error("Section not found%s", section)
         return None
 
 
@@ -39,7 +31,7 @@ config = load_config()
 def extract_metacritic_data():
     """Extract data from Metacritic"""
     if config is None:
-        logging.error("Configuration not loaded, cannot extract metacritic data.")
+        logging.error("Configuration not loaded.")
         return None
     db_url = f"postgresql+psycopg2://{config['user']}:{config['password']}@{config['host']}/{config['database']}"
     engine = create_engine(db_url)
@@ -47,16 +39,16 @@ def extract_metacritic_data():
         query = "SELECT * FROM games_data"
         metacritic_data = pd.read_sql(query, engine)
         logging.info("Metacritic data extracted successfully")
+        return metacritic_data
     except ImportError as e:
         logging.error("Database connection failed:%s", e)
         return None
-    return metacritic_data
 
 
 def extract_api_data():
     """Extract data from the API"""
     if config is None:
-        logging.error("Configuration not loaded, cannot extract API data.")
+        logging.error("Configuration not loaded.")
         return None
     db_url = f"postgresql+psycopg2://{config['user']}:{config['password']}@{config['host']}/{config['database']}"
     engine = create_engine(db_url)
@@ -64,10 +56,11 @@ def extract_api_data():
         query = "SELECT * FROM api_data"
         api_data = pd.read_sql(query, engine)
         logging.info("API data extracted successfully")
+        return api_data
     except ImportError as e:
         logging.error("Database connection failed: %s", e)
         return None
-    return api_data
+
 
 def transform_metacritic_data(metacritic_data):
     """Transform metacritic data"""
@@ -118,7 +111,8 @@ def transform_api_data(api_data):
                 return None
         else:
             return None
-
+    api_data['rating'] = api_data['esrb_rating'].apply(extract_classification_names)
+    
     def extract_first_genre_name(json_str):
         if isinstance(json_str, str):
             try:
@@ -133,25 +127,30 @@ def transform_api_data(api_data):
                 return None
         else:
             return None
+    api_data['genres'] = api_data['genres'].apply(extract_first_genre_name)
 
-    def extract_first_platform_name_from_string(json_str):
+    def extract_first_platform_name_from_string(json_str, index):
         if not json_str or json_str.strip() in ['platforms', '']:
+            print(f"Row {index}: Empty or placeholder string")
             return None
+        
+        # Check if the string is a plain text value
         if json_str.isalpha():
+            print(f"Row {index}: Plain text value: {json_str}")
             return json_str
+        
         try:
+            # Replace single quotes with double quotes to form valid JSON
             json_str = json_str.replace("'", '"')
+            
+            # Find the platform names using regular expressions
             matches = re.findall(r'"name":\s*"([^"]+)"', json_str)
             if matches:
-                return matches[0]
-            else:
-                return None
+                return matches[0]  # Return the first match
         except ImportError as e:
-            logging.error("Failed to load %s", e)
+            print("Error processing string:%S", e)
             return None
 
-    api_data['rating'] = api_data['esrb_rating'].apply(extract_classification_names)
-    api_data['genres'] = api_data['genres'].apply(extract_first_genre_name)
     api_data['platforms'] = api_data.apply(lambda row: extract_first_platform_name_from_string(row['platforms'], row.name), axis=1)
 
     api_relevant_columns = [
