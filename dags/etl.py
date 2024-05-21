@@ -162,6 +162,7 @@ def transform_api_data(api_data):
     api_data_relevant['name'] = api_data_relevant['name'].str.lower() \
                              .str.replace(r"\(.*\)", "", regex=True) \
                              .str.replace(r"[-:,$#.//'\[\]()]", "", regex=True)
+
     api_data_relevant.rename(columns={
         'name': 'title',
         'rating': 'rating',
@@ -177,13 +178,19 @@ def transform_api_data(api_data):
         "Rating Pending": "RATED RP FOR RATE PENDING",
         "Teen": "RATED T FOR TEEN"
     }
+
     api_data_relevant['rating'] = api_data_relevant['rating'].map(rating_mapping)
+
     api_data_relevant = api_data_relevant.map(lambda x: x.upper() if isinstance(x, str) else x)
+
     return api_data
 
 
 def merge_data(metacritic_data, api_data):
     """Merge dataset and API data"""
+    metacritic_data['title'] = metacritic_data['title'].str.strip().str.upper()
+    metacritic_data['released'] = pd.to_datetime(metacritic_data['released']).dt.date
+
     merged_data = pd.merge(api_data, metacritic_data, on=['title', 'released', 'genres', 'platforms'], how='outer')
     merged_data.drop(columns=['metacritic_score', 'user score', 'developer', 'publisher'], inplace=True)
     cleaned_merged_data = merged_data.dropna()
