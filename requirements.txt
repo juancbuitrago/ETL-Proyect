@@ -25,6 +25,7 @@ pillow
 platformdirs
 prompt-toolkit
 psutil
+psycopg2-binary
 pure-eval
 Pygments
 pyparsing
@@ -34,7 +35,7 @@ pytz
 pyzmq
 seaborn
 six
-SQLAlchemy
+sqlalchemy
 stack-data
 tornado
 traitlets

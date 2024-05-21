@@ -12,36 +12,62 @@ from sqlalchemy import create_engine
 load_dotenv()
 Config_Path = os.getenv('DB_PATH')
 
+if Config_Path is None:
+    logging.error("Environment variable 'DB_PATH' is not set.")
+else:
+    logging.info("Environment variable 'DB_PATH' is set to:%s", Config_Path)
+
+
+def load_config():
+    """load config"""
+    try:
+        with open(Config_Path, 'r', encoding="utf-8") as file:
+            config = json.load(file)
+            logging.info("Configuration file loaded successfully.")
+            return config
+    except FileNotFoundError:
+        logging.error("Configuration file not found at path %s", Config_Path)
+        return None
+    except json.JSONDecodeError as e:
+        logging.error("Error decoding JSON configuration file: %s", e)
+        return None
+
+
+config = load_config()
+
 
 def extract_metacritic_data():
     """Extract data from Metacritic"""
-    config = Config_Path
+    if config is None:
+        logging.error("Configuration not loaded, cannot extract metacritic data.")
+        return None
     db_url = f"postgresql+psycopg2://{config['user']}:{config['password']}@{config['host']}/{config['database']}"
     engine = create_engine(db_url)
-
     try:
         query = "SELECT * FROM games_data"
         metacritic_data = pd.read_sql(query, engine)
-        logging.info("CSV data extracted successfully")
+        logging.info("Metacritic data extracted successfully")
     except ImportError as e:
-        logging.debug("Database connection failed: %s", e)
+        logging.error("Database connection failed:%s", e)
+        return None
     return metacritic_data
 
 
 def extract_api_data():
     """Extract data from the API"""
-    config = Config_Path
+    if config is None:
+        logging.error("Configuration not loaded, cannot extract API data.")
+        return None
     db_url = f"postgresql+psycopg2://{config['user']}:{config['password']}@{config['host']}/{config['database']}"
     engine = create_engine(db_url)
-
     try:
         query = "SELECT * FROM api_data"
         api_data = pd.read_sql(query, engine)
-        logging.info("CSV data extracted successfully")
+        logging.info("API data extracted successfully")
     except ImportError as e:
-        logging.debug("Database connection failed: %s", e)
+        logging.error("Database connection failed: %s", e)
+        return None
     return api_data
-
 
 def transform_metacritic_data(metacritic_data):
     """Transform metacritic data"""
