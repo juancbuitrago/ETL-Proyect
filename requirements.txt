@@ -31,6 +31,7 @@ Pygments
 pyparsing
 python-dateutil
 python-dotenv
+kafka-python
 pytz
 pyzmq
 seaborn

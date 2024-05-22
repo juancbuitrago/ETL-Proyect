@@ -2,10 +2,14 @@
 
 import logging
 import json
+from json import dumps
 from configparser import ConfigParser
 import re
+from kafka import KafkaProducer
 import psycopg2
 import pandas as pd
+import datetime as dt
+import time
 from sqlalchemy import create_engine
 
 
@@ -293,3 +297,32 @@ def load_data(merged_data):
         )
 
     logging.info("Data loaded into the dimensional model successfully.")
+
+
+def kafka_producer(config, table_name, topic_name):
+    """Kafka producer games db"""
+    db_url = f"postgresql+psycopg2://{config['user']}:{config['password']}@{config['host']}/{config['database']}"
+    engine = create_engine(db_url)
+
+    # Read data from the specified table
+    query = f"SELECT * FROM {table_name}"
+    df = pd.read_sql(query, engine)
+
+    producer = KafkaProducer(
+        value_serializer=lambda m: dumps(m).encode('utf-8'),
+        bootstrap_servers=['kafka-test2:9092']
+    )
+
+    for _, row in df.iterrows():
+        row_json = row.to_json()
+        producer.send(topic_name, value=row_json)
+        print(f"Message sent at {dt.datetime.utcnow()}")
+        time.sleep(2)
+
+    print("All rows were sent successfully!")
+
+
+def send_to_kafka():
+    """Kafka stream games"""
+    config = load_config()
+    kafka_producer(config, 'fact_game', 'games_stream')

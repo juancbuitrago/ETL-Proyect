@@ -44,12 +44,18 @@ def data_merging_etl_dag():
     def load_data(merged_data):
         etl.load_data(merged_data)
 
+    @task
+    def send_to_kafka():
+        etl.send_to_kafka()
+
     metacritic_data = extract_metacritic_data()
     api_data = extract_api_data()
     transformed_metacritic_data = transform_metacritic_data(metacritic_data)
     transformed_api_data = transform_api_data(api_data)
     merged_data = merge_data(transformed_metacritic_data, transformed_api_data)
-    load_data(merged_data)
+    loaded_data = load_data(merged_data)
+    send_to_kafka_task = send_to_kafka()
+    loaded_data.set_downstream(send_to_kafka_task)
 
 
 ETL_WORKFLOW = data_merging_etl_dag()
