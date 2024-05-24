@@ -14,7 +14,7 @@ from sqlalchemy import create_engine
 
 
 def load_config(filename="config/database.ini", section="postgresql"):
-    """Load configuration from .ini file"""
+    """Load configuration from .ini     file"""
     parser = ConfigParser()
     parser.read(filename)
     config = {}
@@ -213,6 +213,12 @@ def load_data(merged_data):
     engine = create_engine(db_url)
     conn = engine.connect()
 
+    try:
+        merged_data.to_sql('merged_data', conn, if_exists='replace', index=False)
+        print("Data loaded into the PostgreSQL database successfully.")
+    except ImportError as e:
+        print("Failed to load data into the PostgreSQL database:%s", e)
+
     # Create dimension tables
     conn.execute("""
     CREATE TABLE IF NOT EXISTS platform (
@@ -310,7 +316,7 @@ def kafka_producer(config, table_name, topic_name):
 
     producer = KafkaProducer(
         value_serializer=lambda m: dumps(m).encode('utf-8'),
-        bootstrap_servers=['kafka-test2:9092']
+        bootstrap_servers=['localhost:9092']  
     )
 
     for _, row in df.iterrows():

@@ -1,42 +1,44 @@
-"""Consumer kafka games stream"""
 import json
 import sys
+import requests
+import pandas as pd
 from kafka import KafkaConsumer
 import six
-
 
 if sys.version_info >= (3, 12, 0):
     sys.modules['kafka.vendor.six.moves'] = six.moves
 
-def consume_messages(topic_name):
-    consumer = KafkaConsumer(
-        topic_name,
-        bootstrap_servers=['localhost:29092'],
-        auto_offset_reset='earliest',
-        enable_auto_commit=True,
-        group_id='games_consumer_group',
-        value_deserializer=lambda x: json.loads(x.decode('utf-8'))
-    )
+# Power BI streaming dataset endpoint URL
+REST_API_URL = "https://api.powerbi.com/beta/693cbea0-4ef9-4254-8977-76e05cb5f556/datasets/ef202dbc-50ba-48a0-a751-a8a7bffe11b2/rows?experience=power-bi&key=gkakhRw%2BpsKPZZzdtf9MJhb0B7hDzSZN6yfPqbnnsbHEVWHCbYzyrYJP3VGZDUkFpDtpA9fqPpMyPj%2BKCInXoA%3D%3D"
 
-    print(f"Consuming messages from topic: {topic_name}")
+# Kafka Consumer
+consumer = KafkaConsumer(
+    'games_stream',
+    bootstrap_servers=['localhost:9092'],
+    auto_offset_reset='earliest',
+    enable_auto_commit=True,
+    group_id='games_consumer_group',
+    value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+)
 
-    for message in consumer:
-        try:
-            # Print raw message
-            print(f"Raw message: {message.value}")
+print("Consuming messages from topic: games_stream")
 
-            # Handle empty messages
-            if not message.value:
-                print("Received empty message")
-                continue
+while True:
+    data_raw = []
 
-            # Deserialize and print message
-            data = json.loads(message.value.decode('utf-8'))
-            print(f"Received message: {data}")
+    for i in range(1):  # Adjust the range as needed for batch size
+        message = next(consumer)
+        row = json.loads(message.value)  # Convert JSON string to dictionary
+        data_raw.append(row)
+        print("Raw data - ", data_raw)
 
-        except json.JSONDecodeError as e:
-            print(f"JSON decode error: {e} - Raw message: {message.value}")
+    # Set the header record
+    HEADER = ["title", "released", "rating", "ratings_count", "genres", "platforms"]
 
+    data_df = pd.DataFrame(data_raw, columns=HEADER)
+    data_json = bytes(data_df.to_json(orient='records'), encoding='utf-8')
+    print("JSON dataset", data_json)
 
-if __name__ == "__main__":
-    consume_messages('games_stream')
+    # Post the data on the Power BI API
+    req = requests.post(REST_API_URL, data_json)
+    print("Data posted in Power BI API")
