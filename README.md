@@ -40,8 +40,10 @@ The structure of the directories and files is as follows:
     ├── docker-compose.yml
     ├── Dockerfile
     ├── requirements.txt
-    ├── .vscode
-    │   └── settings.json
+    ├── outputs
+    │   └── ...
+    ├── logs
+    │   └── ...
     ├── dags
     │   ├── __init__.py
     │   ├── dag_decorators.py
@@ -58,12 +60,15 @@ The structure of the directories and files is as follows:
     │   ├── eda_002.ipynb
     │   ├── eda_003.ipynb
     │   └── eda_004.ipynb
-    ├── pj3
+    ├── project3
     │   └── ...
     ├── public
     │   ├── airflow_logo.png
     │   ├── kafka_logo.png
     │   └── libraries.png
+    ├── config
+    │   ├── database.ini
+    │   └── dbconfig.py
     └── src
         └── etl.py
 </pre>
