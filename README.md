@@ -66,11 +66,10 @@ The structure of the directories and files is as follows:
     │   ├── airflow_logo.png
     │   ├── kafka_logo.png
     │   └── libraries.png
-    ├── config
-    │   ├── database.ini
-    │   └── dbconfig.py
-    └── src
-        └── etl.py
+    └──  config
+        ├── database.ini
+        └── dbconfig.py
+
 </pre>
 
 
