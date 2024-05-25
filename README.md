@@ -40,33 +40,36 @@ The structure of the directories and files is as follows:
     ├── docker-compose.yml
     ├── Dockerfile
     ├── requirements.txt
-    ├── outputs
+    ├── outputs/
+    ├── plugins/
+    ├── .vscode/
+    │   └── settings.json
+    ├── logs/
     │   └── ...
-    ├── logs
-    │   └── ...
-    ├── dags
+    ├── outputs/
+    ├── dags/
     │   ├── __init__.py
     │   ├── dag_decorators.py
     │   ├── etl.py
     │   └── main.py
-    ├── data
+    ├── data/
     │   └── ...
-    ├── docs
+    ├── docs/
     │   ├── Dashboard_proyecto.pdf
     │   ├── ETL_documentation.pdf
     │   └── Games_dashboard.pdf
-    ├── notebooks
+    ├── notebooks/
     │   ├── eda_001.ipynb
     │   ├── eda_002.ipynb
     │   ├── eda_003.ipynb
     │   └── eda_004.ipynb
-    ├── project3
+    ├── project3/
     │   └── ...
-    ├── public
+    ├── public/
     │   ├── airflow_logo.png
     │   ├── kafka_logo.png
     │   └── libraries.png
-    └──  config
+    └──  config/
         ├── database.ini
         └── dbconfig.py
 
@@ -96,24 +99,32 @@ If installed successfully, you should have the following libraries installed:
 
 ## Project Execution 🚀
 
-1. The repository must be cloned using this command:
-    ```
-    git clone --corte3 https://github.com/juancbuitrago/ETL-Project.git
-    ```
-
-2. Enter the project with this command (you must run this inside the folder where you are cloning the repository):
+1. In a terminal, enter in a folder that you want to clone the repository:
     ```
     cd your_folder
     ```
 
-3. Open a command line and execute the following command to raise the Docker service:
+2. Clone the repository using this command:
     ```
-    docker compose up -d
+    git clone --branch corte3 https://github.com/juancbuitrago/ETL-Project.git
     ```
 
-4. Enter the airflow web server: [http://localhost:8080](http://localhost:8080). Execute the workflow.
+3. In the folder 'config' create a file called 'database.ini' like this:
+    ```
+    [postgresql]
+    host=host.docker.internal
+    database=games
+    user=your_postgres_user
+    password=your_postgres_password
 
-5. In the same command line, execute this command to access the container and create the topic:
+4. Open a command line and execute the following command to raise the Docker service:
+    ```
+    docker compose up
+    ```
+
+5. Enter the airflow web server: [http://localhost:8080](http://localhost:8080). Execute the workflow.
+
+6. In a new terminal, execute this command to access the container and create the topic:
     ```
     docker exec -it kafka-test bash
     ```
@@ -121,7 +132,7 @@ If installed successfully, you should have the following libraries installed:
     kafka-topics --bootstrap-server kafka-test:9092 --create --topic games_stream
     ```
 
-6. Open a new terminal, (preferably bash) and execute these commands to access into the folder with kafka producer and execute it:
+7. Open a new terminal, (preferably bash) and execute these commands to access into the folder with kafka producer and execute it:
     ```
     cd dags
     ```
@@ -129,7 +140,7 @@ If installed successfully, you should have the following libraries installed:
     python producer.py
     ```
 
-7. With the producer running, execute the kafka consumer in the same folder using this command:
+8. With the producer running, execute the kafka consumer in the same folder using this command:
     ```
     python consumer.py
     ```
